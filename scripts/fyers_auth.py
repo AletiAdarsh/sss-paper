@@ -21,7 +21,7 @@ TOKFILE = ROOT / "data" / "live" / "token.json"
 # Headless-login endpoints (unofficial but standard): the OTP/PIN steps live on the
 # api-t2 "vagator/v2" host; the authcode step on api.fyers.in/api/v2/token.
 VAGATOR = "https://api-t2.fyers.in/vagator/v2"
-TOKEN_URL = "https://api.fyers.in/api/v2/token"
+TOKEN_URL = "https://api-t1.fyers.in/api/v3/token"
 
 
 def _b64(s):
@@ -45,6 +45,28 @@ def _post(url, body, headers=None):
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")[:400]
         raise RuntimeError(f"HTTP {e.code} at {url.rsplit('/', 1)[-1]} -> {detail}") from None
+
+
+def _post_token(url, body, headers):
+    """The token step replies with the auth-code Url in the JSON body, but under a
+    308 status -- don't follow the redirect; read the body (works on 200 too)."""
+    req = urllib.request.Request(url, data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json",
+                                          "User-Agent": "Mozilla/5.0", **headers})
+
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+
+    try:
+        resp = urllib.request.build_opener(_NoRedirect).open(req, timeout=30)
+        return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        txt = e.read().decode(errors="replace")
+        try:
+            return json.loads(txt)
+        except Exception:
+            raise RuntimeError(f"HTTP {e.code} at token -> {txt[:400]}") from None
 
 
 def _secret(name, creds_key=None):
@@ -78,11 +100,10 @@ def totp_login():
             time.sleep(2)
     r = _post(f"{VAGATOR}/verify_pin_v2", {"request_key": rk, "identity_type": "pin", "identifier": _b64(pin)})
     login_tok = r["data"]["access_token"]
-    print(f"[auth] client_id={client_id!r} app_short={app_short!r} appType={app_type!r} redirect={c['redirect_uri']!r}")
-    payload = {"fyers_id": fy_id, "app_id": app_short, "redirect_uri": c["redirect_uri"],
+    payload = {"fyers_id": fy_id, "app_id": client_id, "redirect_uri": c["redirect_uri"],
                "appType": app_type, "code_challenge": "", "state": "sample", "scope": "",
                "nonce": "", "response_type": "code", "create_cookie": True}
-    r = _post(TOKEN_URL, payload, headers={"Authorization": f"Bearer {login_tok}"})
+    r = _post_token(TOKEN_URL, payload, {"Authorization": f"Bearer {login_tok}"})
     auth_code = urllib.parse.parse_qs(urllib.parse.urlparse(r["Url"]).query)["auth_code"][0]
     return fy.exchange_token(auth_code)          # saves access_token into creds
 
