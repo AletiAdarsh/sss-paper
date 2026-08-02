@@ -18,7 +18,10 @@ import fyers_client as fy
 
 ROOT = Path(os.environ.get("SSS_ROOT", r"C:\Users\adars\sss"))
 TOKFILE = ROOT / "data" / "live" / "token.json"
-BASE = "https://api-t1.fyers.in/api/v3"
+# Headless-login endpoints (unofficial but standard): the OTP/PIN steps live on the
+# api-t2 "vagator/v2" host; the authcode step on api.fyers.in/api/v2/token.
+VAGATOR = "https://api-t2.fyers.in/vagator/v2"
+TOKEN_URL = "https://api.fyers.in/api/v2/token"
 
 
 def _b64(s):
@@ -33,8 +36,8 @@ def totp(secret, digits=6, period=30):
     return str((struct.unpack(">I", h[off:off + 4])[0] & 0x7FFFFFFF) % (10 ** digits)).zfill(digits)
 
 
-def _post(path, body, headers=None):
-    req = urllib.request.Request(f"{BASE}/{path}", data=json.dumps(body).encode(),
+def _post(url, body, headers=None):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json",
                                           "User-Agent": "Mozilla/5.0", **(headers or {})})
     return json.loads(urllib.request.urlopen(req, timeout=30).read().decode())
@@ -59,22 +62,22 @@ def totp_login():
         raise RuntimeError("missing FYERS_FY_ID / FYERS_PIN / FYERS_TOTP_SECRET")
     client_id = c["app_id"]; app_short, app_type = client_id.split("-")
 
-    r = _post("send_login_otp", {"fy_id": _b64(fy_id), "app_id": "2"})
+    r = _post(f"{VAGATOR}/send_login_otp_v2", {"fy_id": _b64(fy_id), "app_id": "2"})
     rk = r["request_key"]
     # TOTP can roll over mid-call; retry once on the next window
     for attempt in range(2):
         try:
-            r = _post("verify_otp", {"request_key": rk, "otp": totp(secret)})
+            r = _post(f"{VAGATOR}/verify_otp", {"request_key": rk, "otp": totp(secret)})
             rk = r["request_key"]; break
         except Exception:
             if attempt: raise
             time.sleep(2)
-    r = _post("verify_pin", {"request_key": rk, "identity_type": "pin", "identifier": _b64(pin)})
+    r = _post(f"{VAGATOR}/verify_pin_v2", {"request_key": rk, "identity_type": "pin", "identifier": _b64(pin)})
     login_tok = r["data"]["access_token"]
     payload = {"fyers_id": fy_id, "app_id": app_short, "redirect_uri": c["redirect_uri"],
                "appType": app_type, "code_challenge": "", "state": "sample", "scope": "",
                "nonce": "", "response_type": "code", "create_cookie": True}
-    r = _post("token", payload, headers={"Authorization": f"Bearer {login_tok}"})
+    r = _post(TOKEN_URL, payload, headers={"Authorization": f"Bearer {login_tok}"})
     auth_code = urllib.parse.parse_qs(urllib.parse.urlparse(r["Url"]).query)["auth_code"][0]
     return fy.exchange_token(auth_code)          # saves access_token into creds
 
