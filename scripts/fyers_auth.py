@@ -60,13 +60,20 @@ def _post_token(url, body, headers):
 
     try:
         resp = urllib.request.build_opener(_NoRedirect).open(req, timeout=30)
-        return json.loads(resp.read().decode())
+        d = json.loads(resp.read().decode()); d.setdefault("_location", resp.headers.get("Location"))
+        return d
     except urllib.error.HTTPError as e:
+        loc = e.headers.get("Location")           # 308 -> auth_code lives here
         txt = e.read().decode(errors="replace")
         try:
-            return json.loads(txt)
+            d = json.loads(txt)
         except Exception:
+            d = {}
+        if loc:
+            d.setdefault("_location", loc)
+        if not d:
             raise RuntimeError(f"HTTP {e.code} at token -> {txt[:400]}") from None
+        return d
 
 
 def _secret(name, creds_key=None):
@@ -104,7 +111,10 @@ def totp_login():
                "appType": app_type, "code_challenge": "", "state": "sample", "scope": "",
                "nonce": "", "response_type": "code", "create_cookie": True}
     r = _post_token(TOKEN_URL, payload, {"Authorization": f"Bearer {login_tok}"})
-    auth_code = urllib.parse.parse_qs(urllib.parse.urlparse(r["Url"]).query)["auth_code"][0]
+    url = r.get("Url") or r.get("url") or r.get("_location")
+    if not url:
+        raise RuntimeError(f"token step: no auth Url in response -> {str(r)[:300]}")
+    auth_code = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["auth_code"][0]
     return fy.exchange_token(auth_code)          # saves access_token into creds
 
 
