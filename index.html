@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lux Paper Trader — Live Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#0b0f14;--card:#141b24;--line:#232f3d;--fg:#e6edf3;--mut:#7d8ca0;--grn:#26d07c;--red:#ff5b6e;--acc:#4c8dff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:17px;margin:0;font-weight:650}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--grn);box-shadow:0 0 8px var(--grn)}
+  .sub{color:var(--mut);font-size:12px}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .kpi .l{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .kpi .v{font-size:23px;font-weight:680;margin-top:4px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:20px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase}
+  .scroll{overflow-x:auto}
+  .pos{color:var(--grn)}.neg{color:var(--red)}
+  .pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .ce{background:rgba(38,208,124,.15);color:var(--grn)}.pe{background:rgba(255,91,110,.15);color:var(--red)}
+  .empty{color:var(--mut);text-align:center;padding:26px}
+  footer{color:var(--mut);font-size:11px;text-align:center;padding:16px}
+  a{color:var(--acc)}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot"></span>
+  <h1>Lux Paper Trader</h1>
+  <span class="sub">5m index signal → ATM option · NIFTY / BANKNIFTY / SENSEX · factor 4.0 · <b>paper only</b></span>
+  <span class="sub" id="updated" style="margin-left:auto"></span>
+</header>
+
+<div class="wrap">
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card">
+    <h2>Equity curve — starting capital ₹50,000</h2>
+    <canvas id="eq" height="90"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Open positions</h2>
+    <div class="scroll"><table id="open"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Per-index performance</h2>
+    <div class="scroll"><table id="byidx"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Trade history</h2>
+    <div class="scroll"><table id="trades"></table></div>
+  </div>
+
+  <footer>
+    Reads <code>data/live/ledger.csv</code> from the repo · refreshes every 60s ·
+    <a href="https://github.com/AletiAdarsh/sss-paper" target="_blank">source</a>
+  </footer>
+</div>
+
+<script>
+const START = 50000;
+const LEDGER = "https://raw.githubusercontent.com/AletiAdarsh/sss-paper/master/data/live/ledger.csv";
+const STATE  = "https://raw.githubusercontent.com/AletiAdarsh/sss-paper/master/data/live/state.json";
+const rup = n => (n<0?"-":"+") + "₹" + Math.abs(Math.round(n)).toLocaleString("en-IN");
+const cls = n => n>0?"pos":n<0?"neg":"";
+let chart;
+
+function parseCsv(t){
+  const lines = t.trim().split(/\r?\n/).filter(x=>x);
+  if(lines.length<2) return [];
+  const head = lines[0].split(",");
+  return lines.slice(1).map(l=>{const c=l.split(",");const o={};head.forEach((h,i)=>o[h]=c[i]);return o;});
+}
+
+async function load(){
+  let rows=[], state={};
+  try{ rows = parseCsv(await (await fetch(LEDGER+"?t="+Date.now())).text()); }catch(e){}
+  try{ state = await (await fetch(STATE+"?t="+Date.now())).json(); }catch(e){}
+  render(rows, state);
+  document.getElementById("updated").textContent = "updated " + new Date().toLocaleTimeString("en-IN");
+}
+
+function render(rows, state){
+  const closes = rows.filter(r=>r.action==="CLOSE");
+  const realized = closes.reduce((s,r)=>s+(+r.pnl||0),0);
+  const wins = closes.filter(r=>+r.pnl>0).length;
+  const wr = closes.length ? (wins/closes.length*100) : 0;
+
+  // open positions from state.json
+  const open = [];
+  for(const k in state){ const o=state[k]&&state[k].open; if(o) open.push({index:k,...o}); }
+
+  // KPIs
+  document.getElementById("kpis").innerHTML = [
+    ["Account value", `<span class="${cls(realized)}">₹${Math.round(START+realized).toLocaleString("en-IN")}</span>`],
+    ["Realized P&L", `<span class="${cls(realized)}">${rup(realized)}</span>`],
+    ["Return", `<span class="${cls(realized)}">${(realized/START*100).toFixed(2)}%</span>`],
+    ["Closed trades", closes.length],
+    ["Win rate", closes.length?wr.toFixed(0)+"%":"—"],
+    ["Open now", open.length],
+  ].map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
+
+  // equity curve
+  let eq = START; const pts=[{x:"start",y:START}];
+  closes.forEach(r=>{ eq += (+r.pnl||0); pts.push({x:r.ts_ist,y:Math.round(eq)}); });
+  const ctx = document.getElementById("eq");
+  const data = {labels:pts.map(p=>p.x), datasets:[{data:pts.map(p=>p.y),borderColor:"#4c8dff",
+    backgroundColor:"rgba(76,141,255,.12)",fill:true,tension:.25,pointRadius:0,borderWidth:2}]};
+  const opts = {responsive:true,plugins:{legend:{display:false}},
+    scales:{x:{ticks:{color:"#7d8ca0",maxTicksLimit:8},grid:{color:"#1c2530"}},
+            y:{ticks:{color:"#7d8ca0"},grid:{color:"#1c2530"}}}};
+  if(chart){chart.data=data;chart.update();} else chart=new Chart(ctx,{type:"line",data,options:opts});
+
+  // open positions table
+  const ot=document.getElementById("open");
+  ot.innerHTML = open.length ? `<tr><th>Index</th><th>Side</th><th>Strike</th><th>Entry prem</th><th>Opened</th></tr>`+
+    open.map(o=>`<tr><td>${o.index}</td><td><span class="pill ${o.side.toLowerCase()}">${o.side}</span></td>
+      <td>${o.strike}</td><td>${(+o.premium).toFixed(2)}</td><td>${o.opened||""}</td></tr>`).join("")
+    : `<tr><td colspan="5" class="empty">Flat — no open positions.</td></tr>`;
+
+  // per-index
+  const idx={};
+  closes.forEach(r=>{const i=r.index;(idx[i]=idx[i]||{n:0,net:0,w:0});idx[i].n++;idx[i].net+=+r.pnl||0;if(+r.pnl>0)idx[i].w++;});
+  const bt=document.getElementById("byidx");
+  const keys=Object.keys(idx);
+  bt.innerHTML = keys.length ? `<tr><th>Index</th><th>Trades</th><th>Win%</th><th>Net P&L</th></tr>`+
+    keys.map(i=>`<tr><td>${i}</td><td>${idx[i].n}</td><td>${(idx[i].w/idx[i].n*100).toFixed(0)}%</td>
+      <td class="${cls(idx[i].net)}">${rup(idx[i].net)}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">No closed trades yet.</td></tr>`;
+
+  // trade history (pair OPEN->CLOSE per index, newest first)
+  const tr=[]; const openBy={};
+  rows.forEach(r=>{
+    if(r.action==="OPEN") openBy[r.index]=r;
+    else if(r.action==="CLOSE" && openBy[r.index]){
+      const o=openBy[r.index]; tr.push({index:r.index,side:r.side,strike:r.strike,
+        tin:o.ts_ist,tout:r.ts_ist,pin:o.premium,pout:r.premium,pnl:+r.pnl||0,reason:r.reason});
+      delete openBy[r.index];
+    }
+  });
+  tr.reverse();
+  const tt=document.getElementById("trades");
+  tt.innerHTML = tr.length ? `<tr><th>Index</th><th>Side</th><th>Strike</th><th>In</th><th>Out</th>
+      <th>Entry</th><th>Exit</th><th>P&L</th><th>Exit reason</th></tr>`+
+    tr.map(t=>`<tr><td>${t.index}</td><td><span class="pill ${t.side.toLowerCase()}">${t.side}</span></td>
+      <td>${t.strike}</td><td>${t.tin}</td><td>${t.tout}</td><td>${(+t.pin).toFixed(1)}</td>
+      <td>${(+t.pout).toFixed(1)}</td><td class="${cls(t.pnl)}">${rup(t.pnl)}</td><td>${t.reason}</td></tr>`).join("")
+    : `<tr><td colspan="9" class="empty">No trades yet — first live run Monday 09:15 IST.</td></tr>`;
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
