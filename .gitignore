@@ -1,0 +1,11 @@
+# SECRETS -- never commit these
+data/fyers_creds.json
+data/live/token.json
+
+# python
+__pycache__/
+*.pyc
+
+# large local caches (optional: keep out of the repo)
+data/intraday_cache/
+data/*_FO_master.csv

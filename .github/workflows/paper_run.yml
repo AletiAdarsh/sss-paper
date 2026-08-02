@@ -1,0 +1,64 @@
+name: paper-run
+
+# Lux 5m index-signal -> ATM option, PAPER only. Logs to data/live/ledger.csv.
+# GitHub cron has a 5-min floor, so each run polls internally every 60s (~1-min checks).
+# Market hours 09:15-15:30 IST == 03:45-10:00 UTC (Mon-Fri).
+
+on:
+  schedule:
+    - cron: '*/5 3-10 * * 1-5'
+  workflow_dispatch: {}          # lets you run it manually from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:                     # never let two runs overlap (avoids ledger clashes)
+  group: paper-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSS_ROOT: ${{ github.workspace }}
+      FYERS_FY_ID: ${{ secrets.FYERS_FY_ID }}
+      FYERS_PIN: ${{ secrets.FYERS_PIN }}
+      FYERS_TOTP_SECRET: ${{ secrets.FYERS_TOTP_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Reuse today's token across runs
+        uses: actions/cache@v4
+        with:
+          path: data/live/token.json
+          key: fyers-token-${{ github.run_id }}
+          restore-keys: fyers-token-
+
+      - name: Write Fyers creds from secrets
+        run: |
+          mkdir -p data/live
+          cat > data/fyers_creds.json <<EOF
+          {"app_id": "${{ secrets.FYERS_APP_ID }}", "secret_id": "${{ secrets.FYERS_SECRET_ID }}", "redirect_uri": "https://fyers.in"}
+          EOF
+
+      - name: Run paper signals (4 checks, 60s apart)
+        working-directory: scripts
+        run: python live_paper.py --loop 4 --interval 60
+
+      - name: Commit ledger + state
+        run: |
+          git config user.name  "paper-bot"
+          git config user.email "paper-bot@users.noreply.github.com"
+          git add data/live/ledger.csv data/live/state.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git pull --rebase --autostash
+            git commit -m "paper: $(date -u +%FT%TZ)"
+            git push
+          else
+            echo "no changes"
+          fi
