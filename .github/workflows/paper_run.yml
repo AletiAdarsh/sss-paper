@@ -48,7 +48,7 @@ jobs:
 
       - name: Run paper signals (4 checks, 60s apart)
         working-directory: scripts
-        run: python live_paper.py --loop 4 --interval 60
+        run: python live_paper.py --loop 1 --interval 60
 
       - name: Commit ledger + state
         run: |

@@ -11,7 +11,7 @@ Secrets come from env (GitHub Secrets) or fall back to the creds file:
     FYERS_APP_ID      client id e.g. Y084N3A0NM-200   (also in creds)
     FYERS_SECRET_ID   app secret                       (also in creds)
 """
-import os, json, time, base64, hmac, struct, urllib.request, urllib.parse
+import os, json, time, base64, hmac, struct, urllib.request, urllib.parse, urllib.error
 from datetime import date
 from pathlib import Path
 import fyers_client as fy
@@ -40,7 +40,11 @@ def _post(url, body, headers=None):
     req = urllib.request.Request(url, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json",
                                           "User-Agent": "Mozilla/5.0", **(headers or {})})
-    return json.loads(urllib.request.urlopen(req, timeout=30).read().decode())
+    try:
+        return json.loads(urllib.request.urlopen(req, timeout=30).read().decode())
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace")[:400]
+        raise RuntimeError(f"HTTP {e.code} at {url.rsplit('/', 1)[-1]} -> {detail}") from None
 
 
 def _secret(name, creds_key=None):
