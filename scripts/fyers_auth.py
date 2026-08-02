@@ -78,6 +78,7 @@ def totp_login():
             time.sleep(2)
     r = _post(f"{VAGATOR}/verify_pin_v2", {"request_key": rk, "identity_type": "pin", "identifier": _b64(pin)})
     login_tok = r["data"]["access_token"]
+    print(f"[auth] client_id={client_id!r} app_short={app_short!r} appType={app_type!r} redirect={c['redirect_uri']!r}")
     payload = {"fyers_id": fy_id, "app_id": app_short, "redirect_uri": c["redirect_uri"],
                "appType": app_type, "code_challenge": "", "state": "sample", "scope": "",
                "nonce": "", "response_type": "code", "create_cookie": True}
