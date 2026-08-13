@@ -1,14 +1,26 @@
 {
   "NIFTY": {
-    "open": null,
-    "last_bar_ts": 1786528500
+    "open": {
+      "side": "PE",
+      "strike": 24350,
+      "premium": 128.5890014872657,
+      "bar_ts": 1786592700,
+      "opened": "2026-08-13 09:15"
+    },
+    "last_bar_ts": 1786592700
   },
   "BANKNIFTY": {
-    "open": null,
-    "last_bar_ts": 1786528500
+    "open": {
+      "side": "PE",
+      "strike": 57600,
+      "premium": 537.2472200375341,
+      "bar_ts": 1786592700,
+      "opened": "2026-08-13 09:15"
+    },
+    "last_bar_ts": 1786592700
   },
   "SENSEX": {
     "open": null,
-    "last_bar_ts": 1786528500
+    "last_bar_ts": 1786592700
   }
 }
