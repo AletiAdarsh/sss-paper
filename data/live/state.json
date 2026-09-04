@@ -8,7 +8,13 @@
     "last_bar_ts": 1788429300
   },
   "SENSEX": {
-    "open": null,
-    "last_bar_ts": 1788429300
+    "open": {
+      "side": "CE",
+      "strike": 76700,
+      "premium": 372.0721248585178,
+      "bar_ts": 1788493500,
+      "opened": "2026-09-04 09:15"
+    },
+    "last_bar_ts": 1788493500
   }
 }
