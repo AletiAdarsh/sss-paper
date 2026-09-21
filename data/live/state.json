@@ -1,11 +1,11 @@
 {
   "NIFTY": {
     "open": null,
-    "last_bar_ts": 1789968600
+    "last_bar_ts": 1789968900
   },
   "BANKNIFTY": {
     "open": null,
-    "last_bar_ts": 1789968600
+    "last_bar_ts": 1789968900
   },
   "SENSEX": {
     "open": {
@@ -15,6 +15,6 @@
       "bar_ts": 1789962300,
       "opened": "2026-09-21 09:15"
     },
-    "last_bar_ts": 1789968600
+    "last_bar_ts": 1789968900
   }
 }
