@@ -7,11 +7,11 @@
       "bar_ts": 1792035900,
       "opened": "2026-10-15 09:15"
     },
-    "last_bar_ts": 1792036200
+    "last_bar_ts": 1792036500
   },
   "BANKNIFTY": {
     "open": null,
-    "last_bar_ts": 1792036200
+    "last_bar_ts": 1792036500
   },
   "SENSEX": {
     "open": {
@@ -21,6 +21,6 @@
       "bar_ts": 1792035900,
       "opened": "2026-10-15 09:15"
     },
-    "last_bar_ts": 1792036200
+    "last_bar_ts": 1792036500
   }
 }
